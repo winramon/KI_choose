@@ -63,7 +63,7 @@ def choose_second_priority(first_priority):
             return "КСМ"
     if first_priority == "СКС":
         r = random.random()
-        if r <= (0.30 / 0.40):
+        if r <= (0.4 / 0.50):
             return "СП"
         else:
             return "КСМ"
@@ -170,7 +170,7 @@ def main():
             iterations = 10000
             results = run_simulation(candidate_score, candidate_priorities, iterations)
             st.subheader("Результати:")
-            for dept in ["СП", "СКС", "КСМ", "не вступив"]:
+            for dept in ["СП", "СКС", "КСМ"]:
                 st.write(f"{dept}: {results[dept]:.2f}%")
 
 if __name__ == '__main__':
