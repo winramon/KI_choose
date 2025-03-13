@@ -162,14 +162,14 @@ def main():
     candidate_score = st.number_input("Введіть ваш бал:", min_value=0.0, max_value=100.0, value=60.0)
     prios_str = st.text_input("Введіть ваші 3 пріоритети (через кому, напр. СП, СКС, КСМ):", value="СП, СКС, КСМ")
     
-    if st.button("Запустити симуляцію"):
+    if st.button("Глухов?"):
         candidate_priorities = [p.strip().upper() for p in prios_str.split(",")]
         if len(candidate_priorities) != 3 or set(candidate_priorities) != {"СП", "СКС", "КСМ"}:
             st.error("Помилка: потрібно вказати 3 унікальні кафедри (СП, СКС, КСМ).")
         else:
             iterations = 10000
             results = run_simulation(candidate_score, candidate_priorities, iterations)
-            st.subheader("Результати симуляції:")
+            st.subheader("Результати:")
             for dept in ["СП", "СКС", "КСМ", "не вступив"]:
                 st.write(f"{dept}: {results[dept]:.2f}%")
 
