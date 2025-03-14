@@ -1,9 +1,8 @@
 import random
-import math
 import streamlit as st
 
 # -------------------------------------------------
-# 1) Список балів інших студентів
+# 1) Список балів
 # -------------------------------------------------
 OTHER_SCORES = [
     58.877, 67.033, 63.877, 51.855, 65.655, 46.611, 79.988, 79.488, 59.422, 68.800,
@@ -33,36 +32,21 @@ OTHER_SCORES = [
     72.700, 76.800, 63.788, 83.633, 60.186, 75.422, 69.722, 70.500, 69.911, 59.944,
     78.900, 58.066
 ]
-
 # -------------------------------------------------
-# 2) Параметри кафедр: квоти та baseline (мінімальний поріг для конкурсу)
+# 2) Параметри кафедр: квоти та baseline (поріг проходу)
 # -------------------------------------------------
 DEPARTMENTS_QUOTA = {
     "СП": 87,
     "СКС": 86,
     "КСМ": 85
 }
-# Baseline – мінімальний поріг; цей бал виступає як точка для розрахунку бонусу
+# Поріг(якщо студент має нижчий бал, то він вважається менш конкурентним)
 BASELINE = {
-    "СП": 68,
-    "СКС": 57,
-    "КСМ": 50
+    "СП": 70.0,
+    "СКС": 65.0,
+    "КСМ": 50.0
 }
 
-# Налаштування бонусної функції (логістична функція для плавності)
-# k – визначає крутість переходу, L – масштаб бонусу, noise_range – амплітуда шуму
-K = 1.0  
-L = 2.0  
-NOISE_RANGE = 0.5
-
-# Функція для обчислення ефективного балу:
-# Використовуємо логістичний бонус: bonus = L * tanh(K * (score - baseline))
-def effective_score(score, baseline, noise_range=NOISE_RANGE, k=K, L=L):
-    noise = random.uniform(-noise_range, noise_range)
-    bonus = L * math.tanh(k * (score - baseline))
-    return score + noise + bonus
-
-# Ваги для призначення пріоритетів для інших студентів (рандомно)
 FIRST_PRIORITY_WEIGHTS = {
     "СП": 60,
     "СКС": 30,
@@ -90,9 +74,7 @@ def assign_priorities_for_student():
     third = [dept for dept in ["СП", "СКС", "КСМ"] if dept not in (first, second)][0]
     return [first, second, third]
 
-# -------------------------------------------------
-# Симуляція мульти-раунд вступу із використанням бонусної функції
-# -------------------------------------------------
+
 def simulate_multiround(candidate_score, candidate_priorities):
     students = []
     for s in OTHER_SCORES:
@@ -114,7 +96,6 @@ def simulate_multiround(candidate_score, candidate_priorities):
 
     remaining_quota = DEPARTMENTS_QUOTA.copy()
 
-    # Проведення 3 раундів відбору
     for round_index in range(3):
         for dept in DEPARTMENTS_QUOTA:
             if remaining_quota[dept] <= 0:
@@ -122,26 +103,28 @@ def simulate_multiround(candidate_score, candidate_priorities):
             applicants = [st for st in students if st["admitted"] is None and st["priorities"][round_index] == dept]
             if not applicants:
                 continue
-            # Обчислюємо "ефективний" бал для кожного заявника залежно від конкретного baseline кафедри
-            for st_candidate in applicants:
-                st_candidate["effective"] = effective_score(st_candidate["score"], BASELINE[dept])
-            sorted_applicants = sorted(applicants, key=lambda x: x["effective"], reverse=True)
+            eligible = [st for st in applicants if st["score"] >= BASELINE[dept]]
+            if eligible:
+                sorted_applicants = sorted(eligible, key=lambda x: x["score"], reverse=True)
+            else:
+                sorted_applicants = sorted(applicants, key=lambda x: x["score"], reverse=True)
             admitted_count = 0
-            for st_candidate in sorted_applicants:
+            for st in sorted_applicants:
                 if admitted_count >= remaining_quota[dept]:
                     break
-                st_candidate["admitted"] = dept
+                st["admitted"] = dept
                 admitted_count += 1
             remaining_quota[dept] -= admitted_count
 
-    for st_candidate in students:
-        if st_candidate["candidate"]:
-            return st_candidate["admitted"]
+    for st in students:
+        if st["candidate"]:
+            return st["admitted"]
     return None
 
 # --------------------------------------------
-# Функція проведення симуляції (Monte Carlo)
+# Функція проведення симуляції 
 # --------------------------------------------
+
 def run_simulation_multiround(candidate_score, candidate_priorities, iterations=10000):
     results = {dept: 0 for dept in DEPARTMENTS_QUOTA}
     results["не вступив"] = 0
@@ -154,6 +137,7 @@ def run_simulation_multiround(candidate_score, candidate_priorities, iterations=
     for k in results:
         results[k] = (results[k] / iterations) * 100
     return results
+
 
 # STREAMLIT ІНТЕРФЕЙС
 def main():
