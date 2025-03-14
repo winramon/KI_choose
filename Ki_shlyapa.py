@@ -34,19 +34,24 @@ OTHER_SCORES = [
 ]
 
 # -------------------------------------------------
-# 2) Параметри кафедр: квоти та baseline (поріг проходу)
+# 2) Параметри кафедр: квоти та baseline (мінімальний поріг для конкурсу)
 # -------------------------------------------------
 DEPARTMENTS_QUOTA = {
     "СП": 87,
     "СКС": 86,
     "КСМ": 85
 }
-# Baseline: якщо студент має нижчий бал, то він вважається менш конкурентним
+# Baseline – мінімальний поріг; якщо бал нижчий, то ефективний бал буде знижуватись
 BASELINE = {
-    "СП": 75,
-    "СКС": 60,
+    "СП": 68,
+    "СКС": 57,
     "КСМ": 50
 }
+
+# Налаштування штрафу: penalty_factor визначає, наскільки сильно знижуватиметься ефективний бал,
+# якщо реальний бал нижчий за baseline. Значення 0 означає відсутність штрафу.
+PENALTY_FACTOR = 0.5
+NOISE_RANGE = 0.5  # Амплітуда випадкового шуму
 
 FIRST_PRIORITY_WEIGHTS = {
     "СП": 60,
@@ -105,17 +110,13 @@ def simulate_multiround(candidate_score, candidate_priorities):
             applicants = [st for st in students if st["admitted"] is None and st["priorities"][round_index] == dept]
             if not applicants:
                 continue
-            # Використовуємо baseline, але для сортування додаємо "шум" із більшою амплітудою,
-            # щоб зменшити жорсткість розподілу для дуже близьких балів
-            eligible = [st for st in applicants if st["score"] >= BASELINE[dept]]
-            if eligible:
-                for st in eligible:
-                    st["effective"] = st["score"] + random.uniform(-4.5, 4.5)
-                sorted_applicants = sorted(eligible, key=lambda x: x["effective"], reverse=True)
-            else:
-                for st in applicants:
-                    st["effective"] = st["score"] + random.uniform(-4.5, 4.5)
-                sorted_applicants = sorted(applicants, key=lambda x: x["effective"], reverse=True)
+            # Для кожного заявника обчислюємо "ефективний" бал як:
+            # effective = score + noise - penalty, де penalty = PENALTY_FACTOR * max(0, baseline - score)
+            for st in applicants:
+                noise = random.uniform(-NOISE_RANGE, NOISE_RANGE)
+                penalty = PENALTY_FACTOR * max(0, BASELINE[dept] - st["score"])
+                st["effective"] = st["score"] + noise - penalty
+            sorted_applicants = sorted(applicants, key=lambda x: x["effective"], reverse=True)
             admitted_count = 0
             for st in sorted_applicants:
                 if admitted_count >= remaining_quota[dept]:
