@@ -32,6 +32,7 @@ OTHER_SCORES = [
     72.700, 76.800, 63.788, 83.633, 60.186, 75.422, 69.722, 70.500, 69.911, 59.944,
     78.900, 58.066
 ]
+
 # -------------------------------------------------
 # 2) Параметри кафедр: квоти та baseline (поріг проходу)
 # -------------------------------------------------
@@ -40,7 +41,7 @@ DEPARTMENTS_QUOTA = {
     "СКС": 86,
     "КСМ": 85
 }
-# Поріг(якщо студент має нижчий бал, то він вважається менш конкурентним)
+# Поріг (якщо студент має нижчий бал, то він вважається менш конкурентним)
 BASELINE = {
     "СП": 68,
     "СКС": 57,
@@ -96,6 +97,7 @@ def simulate_multiround(candidate_score, candidate_priorities):
 
     remaining_quota = DEPARTMENTS_QUOTA.copy()
 
+    # Проведення 3 раундів відбору
     for round_index in range(3):
         for dept in DEPARTMENTS_QUOTA:
             if remaining_quota[dept] <= 0:
@@ -103,11 +105,17 @@ def simulate_multiround(candidate_score, candidate_priorities):
             applicants = [st for st in students if st["admitted"] is None and st["priorities"][round_index] == dept]
             if not applicants:
                 continue
+            # Використовуємо baseline, але для сортування додаємо "шум",
+            # щоб мінімізувати різкість різниці між дуже близькими балами
             eligible = [st for st in applicants if st["score"] >= BASELINE[dept]]
             if eligible:
-                sorted_applicants = sorted(eligible, key=lambda x: x["score"], reverse=True)
+                for st in eligible:
+                    st["effective"] = st["score"] + random.uniform(-0.01, 0.01)
+                sorted_applicants = sorted(eligible, key=lambda x: x["effective"], reverse=True)
             else:
-                sorted_applicants = sorted(applicants, key=lambda x: x["score"], reverse=True)
+                for st in applicants:
+                    st["effective"] = st["score"] + random.uniform(-0.01, 0.01)
+                sorted_applicants = sorted(applicants, key=lambda x: x["effective"], reverse=True)
             admitted_count = 0
             for st in sorted_applicants:
                 if admitted_count >= remaining_quota[dept]:
@@ -124,7 +132,6 @@ def simulate_multiround(candidate_score, candidate_priorities):
 # --------------------------------------------
 # Функція проведення симуляції 
 # --------------------------------------------
-
 def run_simulation_multiround(candidate_score, candidate_priorities, iterations=10000):
     results = {dept: 0 for dept in DEPARTMENTS_QUOTA}
     results["не вступив"] = 0
@@ -137,7 +144,6 @@ def run_simulation_multiround(candidate_score, candidate_priorities, iterations=
     for k in results:
         results[k] = (results[k] / iterations) * 100
     return results
-
 
 # STREAMLIT ІНТЕРФЕЙС
 def main():
@@ -153,7 +159,7 @@ def main():
     )
 
     if len(candidate_priorities) != 3 or set(candidate_priorities) != {"СП", "СКС", "КСМ"}:
-        st.error("❗ Потрібно вказати рівно 3 унікальні кафедри (СП, СКС, КСМ)!")
+        st.error("❗ Потрібно вказати рівно 3 унікальні кафедри (СП, КСМ, СКС)!")
         return
 
     iterations = 9000
