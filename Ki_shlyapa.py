@@ -2,7 +2,7 @@ import random
 import streamlit as st
 
 # -------------------------------------------------
-# 1) Список балів
+# 1) Список балів інших студентів
 # -------------------------------------------------
 OTHER_SCORES = [
     58.877, 67.033, 63.877, 51.855, 65.655, 46.611, 79.988, 79.488, 59.422, 68.800,
@@ -41,18 +41,24 @@ DEPARTMENTS_QUOTA = {
     "СКС": 86,
     "КСМ": 85
 }
-# Baseline – мінімальний поріг; якщо бал нижчий, то ефективний бал буде знижуватись
+# Baseline – мінімальний поріг; цей бал не гарантує вхід, а виступає як точка для обчислення бонусу
 BASELINE = {
-    "СП": 75,
-    "СКС": 60,
+    "СП": 68,
+    "СКС": 57,
     "КСМ": 50
 }
 
-# Налаштування штрафу: penalty_factor визначає, наскільки сильно знижуватиметься ефективний бал,
-# якщо реальний бал нижчий за baseline. Значення 0 означає відсутність штрафу.
-PENALTY_FACTOR = 0.25
-NOISE_RANGE = 2.5  # Амплітуда випадкового шуму
+# Функція для обчислення ефективного балу кандидата для конкретної кафедри.
+# Якщо бал вище baseline – ефективний бал = score + невеликий шум.
+# Якщо бал нижчий – ми застосовуємо штраф у вигляді зменшення (penalty_factor * (baseline - score)).
+def effective_score(score, baseline, noise_range=0.2, penalty_factor=0.5):
+    noise = random.uniform(-noise_range, noise_range)
+    if score >= baseline:
+        return score + noise
+    else:
+        return score - penalty_factor * (baseline - score) + noise
 
+# Ваги для призначення пріоритетів для інших студентів (рандомно)
 FIRST_PRIORITY_WEIGHTS = {
     "СП": 60,
     "СКС": 30,
@@ -80,9 +86,12 @@ def assign_priorities_for_student():
     third = [dept for dept in ["СП", "СКС", "КСМ"] if dept not in (first, second)][0]
     return [first, second, third]
 
-
+# -------------------------------------------------
+# Симуляція мульти-раунд вступу із плавним бонусом (без різкого відсіювання)
+# -------------------------------------------------
 def simulate_multiround(candidate_score, candidate_priorities):
     students = []
+    # Для кожного іншого студента генеруємо випадкові пріоритети
     for s in OTHER_SCORES:
         prios = assign_priorities_for_student()
         students.append({
@@ -92,6 +101,7 @@ def simulate_multiround(candidate_score, candidate_priorities):
             "admitted": None
         })
 
+    # Додаємо кандидата (з його балом і введеними пріоритетами)
     candidate = {
         "score": candidate_score,
         "priorities": candidate_priorities,
@@ -102,36 +112,35 @@ def simulate_multiround(candidate_score, candidate_priorities):
 
     remaining_quota = DEPARTMENTS_QUOTA.copy()
 
-    # Проведення 3 раундів відбору
+    # Проведення 3 раундів відбору: на кожному раунді кожен студент подає заявку за відповідним пріоритетом
     for round_index in range(3):
         for dept in DEPARTMENTS_QUOTA:
             if remaining_quota[dept] <= 0:
                 continue
+            # Обираємо всіх, хто не зарахований і подає заявку на дану кафедру у цьому раунді
             applicants = [st for st in students if st["admitted"] is None and st["priorities"][round_index] == dept]
             if not applicants:
                 continue
-            # Для кожного заявника обчислюємо "ефективний" бал як:
-            # effective = score + noise - penalty, де penalty = PENALTY_FACTOR * max(0, baseline - score)
-            for st in applicants:
-                noise = random.uniform(-NOISE_RANGE, NOISE_RANGE)
-                penalty = PENALTY_FACTOR * max(0, BASELINE[dept] - st["score"])
-                st["effective"] = st["score"] + noise - penalty
+            # Для кожного заявника обчислюємо ефективний бал із використанням нашої функції
+            for st_candidate in applicants:
+                st_candidate["effective"] = effective_score(st_candidate["score"], BASELINE[dept])
             sorted_applicants = sorted(applicants, key=lambda x: x["effective"], reverse=True)
             admitted_count = 0
-            for st in sorted_applicants:
+            for st_candidate in sorted_applicants:
                 if admitted_count >= remaining_quota[dept]:
                     break
-                st["admitted"] = dept
+                st_candidate["admitted"] = dept
                 admitted_count += 1
             remaining_quota[dept] -= admitted_count
 
-    for st in students:
-        if st["candidate"]:
-            return st["admitted"]
+    # Повертаємо кафедру, на яку зарахувався кандидат
+    for st_candidate in students:
+        if st_candidate["candidate"]:
+            return st_candidate["admitted"]
     return None
 
 # --------------------------------------------
-# Функція проведення симуляції 
+# Функція проведення симуляції (Monte Carlo)
 # --------------------------------------------
 def run_simulation_multiround(candidate_score, candidate_priorities, iterations=10000):
     results = {dept: 0 for dept in DEPARTMENTS_QUOTA}
@@ -160,7 +169,7 @@ def main():
     )
 
     if len(candidate_priorities) != 3 or set(candidate_priorities) != {"СП", "СКС", "КСМ"}:
-        st.error("❗ Потрібно вказати рівно 3 унікальні кафедри (СП, КСМ, СКС)!")
+        st.error("❗ Потрібно вказати рівно 3 унікальні кафедри (СП, СКС, КСМ)!")
         return
 
     iterations = 9000
@@ -174,7 +183,6 @@ def main():
             st.write(f"**{dept}**: {results[dept]:.2f}%")
 
         st.success("Глухов.")
-
 
 if __name__ == "__main__":
     main()
