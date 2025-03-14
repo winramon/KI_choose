@@ -41,7 +41,7 @@ DEPARTMENTS_QUOTA = {
     "СКС": 86,
     "КСМ": 85
 }
-# Поріг (якщо студент має нижчий бал, то він вважається менш конкурентним)
+# Baseline: якщо студент має нижчий бал, то він вважається менш конкурентним
 BASELINE = {
     "СП": 68,
     "СКС": 57,
@@ -105,16 +105,16 @@ def simulate_multiround(candidate_score, candidate_priorities):
             applicants = [st for st in students if st["admitted"] is None and st["priorities"][round_index] == dept]
             if not applicants:
                 continue
-            # Використовуємо baseline, але для сортування додаємо "шум",
-            # щоб мінімізувати різкість різниці між дуже близькими балами
+            # Використовуємо baseline, але для сортування додаємо "шум" із більшою амплітудою,
+            # щоб зменшити жорсткість розподілу для дуже близьких балів
             eligible = [st for st in applicants if st["score"] >= BASELINE[dept]]
             if eligible:
                 for st in eligible:
-                    st["effective"] = st["score"] + random.uniform(-0.01, 0.01)
+                    st["effective"] = st["score"] + random.uniform(-0.5, 0.5)
                 sorted_applicants = sorted(eligible, key=lambda x: x["effective"], reverse=True)
             else:
                 for st in applicants:
-                    st["effective"] = st["score"] + random.uniform(-0.01, 0.01)
+                    st["effective"] = st["score"] + random.uniform(-0.5, 0.5)
                 sorted_applicants = sorted(applicants, key=lambda x: x["effective"], reverse=True)
             admitted_count = 0
             for st in sorted_applicants:
