@@ -48,7 +48,7 @@ BASELINE = {
 }
 
 FIRST_PRIORITY_WEIGHTS = {
-    "СП": 110,
+    "СП": 130,
     "СКС": 20,
     "КСМ": 10
 }
