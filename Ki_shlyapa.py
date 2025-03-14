@@ -110,11 +110,11 @@ def simulate_multiround(candidate_score, candidate_priorities):
             eligible = [st for st in applicants if st["score"] >= BASELINE[dept]]
             if eligible:
                 for st in eligible:
-                    st["effective"] = st["score"] + random.uniform(-0.5, 0.5)
+                    st["effective"] = st["score"] + random.uniform(-4.5, 4.5)
                 sorted_applicants = sorted(eligible, key=lambda x: x["effective"], reverse=True)
             else:
                 for st in applicants:
-                    st["effective"] = st["score"] + random.uniform(-0.5, 0.5)
+                    st["effective"] = st["score"] + random.uniform(-4.5, 4.5)
                 sorted_applicants = sorted(applicants, key=lambda x: x["effective"], reverse=True)
             admitted_count = 0
             for st in sorted_applicants:
