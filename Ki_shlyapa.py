@@ -1,8 +1,8 @@
-import streamlit as st
 import random
+import streamlit as st
 
 # -------------------------------------------------
-# 1) Список інших студентів 
+# 1) Список балів
 # -------------------------------------------------
 OTHER_SCORES = [
     58.877, 67.033, 63.877, 51.855, 65.655, 46.611, 79.988, 79.488, 59.422, 68.800,
@@ -32,146 +32,142 @@ OTHER_SCORES = [
     72.700, 76.800, 63.788, 83.633, 60.186, 75.422, 69.722, 70.500, 69.911, 59.944,
     78.900, 58.066
 ]
+# -------------------------------------------------
+# 2) Параметри кафедр: квоти та baseline (поріг проходу)
+# -------------------------------------------------
+DEPARTMENTS_QUOTA = {
+    "СП": 87,
+    "СКС": 86,
+    "КСМ": 85
+}
+# Поріг(якщо студент має нижчий бал, то він вважається менш конкурентним)
+BASELINE = {
+    "СП": 70.0,
+    "СКС": 65.0,
+    "КСМ": 50.0
+}
 
-# -------------------------------------------------
-# 2) Параметри кафедр
-# -------------------------------------------------
-DEPARTMENTS = {
-    "СП":  87,  # квота на СП
-    "СКС": 86,  # квота на СКС
-    "КСМ": 85   # квота на КСМ
+FIRST_PRIORITY_WEIGHTS = {
+    "СП": 60,
+    "СКС": 30,
+    "КСМ": 10
+}
+
+SECOND_PRIORITY_WEIGHTS = {
+    "СП": {"СКС": 50, "КСМ": 15},
+    "СКС": {"СП": 35, "КСМ": 15},
+    "КСМ": {"СП": 35, "СКС": 50}
 }
 
 # -------------------------------------------------
-# 3) 1 пріорітет
+# Функція призначення пріоритетів для іншого студента
 # -------------------------------------------------
-def get_first_priority_counts(num_students):
-    sp_count  = int(round(0.60 * num_students))
-    sks_count = int(round(0.30 * num_students))
-    ksm_count = num_students - sp_count - sks_count
-    return sp_count, sks_count, ksm_count
+def assign_priorities_for_student():
+    first = random.choices(
+        population=["СП", "СКС", "КСМ"],
+        weights=[FIRST_PRIORITY_WEIGHTS["СП"], FIRST_PRIORITY_WEIGHTS["СКС"], FIRST_PRIORITY_WEIGHTS["КСМ"]],
+        k=1
+    )[0]
+    possible = [dept for dept in ["СП", "СКС", "КСМ"] if dept != first]
+    weights = [SECOND_PRIORITY_WEIGHTS[first][dept] for dept in possible]
+    second = random.choices(population=possible, weights=weights, k=1)[0]
+    third = [dept for dept in ["СП", "СКС", "КСМ"] if dept not in (first, second)][0]
+    return [first, second, third]
 
-# -------------------------------------------------
-# 4) 2 пріорітет
-# -------------------------------------------------
-def choose_second_priority(first_priority):
-    if first_priority == "СП":
-        r = random.random()
-        if r <= (0.3 / 0.4):
-            return "СКС"
-        else:
-            return "КСМ"
-    if first_priority == "СКС":
-        r = random.random()
-        if r <= (0.4 / 0.50):
-            return "СП"
-        else:
-            return "КСМ"
-    if first_priority == "КСМ":
-        r = random.random()
-        if r <= (0.35 / 0.85):
-            return "СП"
-        else:
-            return "СКС"
 
-def get_third_priority(f, s):
-    return [d for d in DEPARTMENTS.keys() if d not in (f, s)][0]
+def simulate_multiround(candidate_score, candidate_priorities):
+    students = []
+    for s in OTHER_SCORES:
+        prios = assign_priorities_for_student()
+        students.append({
+            "score": s,
+            "priorities": prios,
+            "candidate": False,
+            "admitted": None
+        })
 
-# -------------------------------------------------
-# 5) Одна симуляція
-# -------------------------------------------------
-def simulate_once(candidate_score, candidate_priorities):
-    num_students = len(OTHER_SCORES)
-    sp_count, sks_count, ksm_count = get_first_priority_counts(num_students)
-
-    # Створюємо список студентів
-    all_students = [{"score": s} for s in OTHER_SCORES]
-    random.shuffle(all_students)
-
-    # Призначаємо 1-й пріоритет
-    idx = 0
-    for _ in range(sp_count):
-        all_students[idx]["first"] = "СП"
-        idx += 1
-    for _ in range(sks_count):
-        all_students[idx]["first"] = "СКС"
-        idx += 1
-    for _ in range(ksm_count):
-        all_students[idx]["first"] = "КСМ"
-        idx += 1
-
-    # Призначаємо 2-й та 3-й пріоритети
-    for st in all_students:
-        f = st["first"]
-        s = choose_second_priority(f)
-        t = get_third_priority(f, s)
-        st["priorities"] = [f, s, t]
-        st["candidate"] = False
-
-    # Додаємо кандидата
     candidate = {
         "score": candidate_score,
         "priorities": candidate_priorities,
-        "candidate": True
+        "candidate": True,
+        "admitted": None
     }
-    all_students.append(candidate)
+    students.append(candidate)
 
-    # Сортуємо за спаданням балів
-    all_students.sort(key=lambda x: (x["score"], random.random()), reverse=True)
+    remaining_quota = DEPARTMENTS_QUOTA.copy()
 
-    # Копія квот
-    available = dict(DEPARTMENTS)
+    for round_index in range(3):
+        for dept in DEPARTMENTS_QUOTA:
+            if remaining_quota[dept] <= 0:
+                continue
+            applicants = [st for st in students if st["admitted"] is None and st["priorities"][round_index] == dept]
+            if not applicants:
+                continue
+            eligible = [st for st in applicants if st["score"] >= BASELINE[dept]]
+            if eligible:
+                sorted_applicants = sorted(eligible, key=lambda x: x["score"], reverse=True)
+            else:
+                sorted_applicants = sorted(applicants, key=lambda x: x["score"], reverse=True)
+            admitted_count = 0
+            for st in sorted_applicants:
+                if admitted_count >= remaining_quota[dept]:
+                    break
+                st["admitted"] = dept
+                admitted_count += 1
+            remaining_quota[dept] -= admitted_count
 
-    # Розсадка
-    admitted = {}
-    for st in all_students:
-        for pref in st["priorities"]:
-            if available[pref] > 0:
-                admitted[id(st)] = pref
-                available[pref] -= 1
-                break
-        else:
-            admitted[id(st)] = None
+    for st in students:
+        if st["candidate"]:
+            return st["admitted"]
+    return None
 
-    return admitted[id(candidate)]
+# --------------------------------------------
+# Функція проведення симуляції 
+# --------------------------------------------
 
-# -------------------------------------------------
-# 6) симуляція
-# -------------------------------------------------
-def run_simulation(candidate_score, candidate_priorities, iterations=10000):
-    counts = {d: 0 for d in DEPARTMENTS}
-    counts["не вступив"] = 0
-
+def run_simulation_multiround(candidate_score, candidate_priorities, iterations=10000):
+    results = {dept: 0 for dept in DEPARTMENTS_QUOTA}
+    results["не вступив"] = 0
     for _ in range(iterations):
-        dept = simulate_once(candidate_score, candidate_priorities)
-        if dept is None:
-            counts["не вступив"] += 1
+        result = simulate_multiround(candidate_score, candidate_priorities)
+        if result is None:
+            results["не вступив"] += 1
         else:
-            counts[dept] += 1
+            results[result] += 1
+    for k in results:
+        results[k] = (results[k] / iterations) * 100
+    return results
 
-    for k in counts:
-        counts[k] = (counts[k] / iterations) * 100
-    return counts
 
-# -------------------------------------------------
-# Streamlit
-# -------------------------------------------------
+# STREAMLIT ІНТЕРФЕЙС
 def main():
     st.title("Розподільна шляпа КІ")
-    
-    candidate_score = st.number_input("Введіть ваш бал:", min_value=0.0, max_value=100.0, value=60.0)
-    prios_str = st.text_input("Введіть ваші 3 пріоритети (через кому, напр. СП, СКС, КСМ):", value="СП, СКС, КСМ")
+    st.write("Чи зустрінете ви Глухова?")
+
+    candidate_score = st.number_input("Ваш конкурсний бал:", min_value=0.0, max_value=100.0, value=75.0, step=0.1)
+
+    candidate_priorities = st.multiselect(
+        "Оберіть ваші 3 пріоритети в порядку важливості:",
+        options=["СП", "СКС", "КСМ"],
+        default=["СП", "СКС", "КСМ"]
+    )
+
+    if len(candidate_priorities) != 3 or set(candidate_priorities) != {"СП", "СКС", "КСМ"}:
+        st.error("❗ Потрібно вказати рівно 3 унікальні кафедри (СП, СКС, КСМ)!")
+        return
+
+    iterations = 9000
     
     if st.button("Глухов?"):
-        candidate_priorities = [p.strip().upper() for p in prios_str.split(",")]
-        if len(candidate_priorities) != 3 or set(candidate_priorities) != {"СП", "СКС", "КСМ"}:
-            st.error("Помилка: потрібно вказати 3 унікальні кафедри (СП, СКС, КСМ).")
-        else:
-            iterations = 10000
-            results = run_simulation(candidate_score, candidate_priorities, iterations)
-            st.subheader("Результати:")
-            for dept in ["СП", "СКС", "КСМ"]:
-                st.write(f"{dept}: {results[dept]:.2f}%")
+        with st.spinner("Обчислюємо ймовірності..."):
+            results = run_simulation_multiround(candidate_score, candidate_priorities, int(iterations))
 
-if __name__ == '__main__':
+        st.subheader("Результати:")
+        for dept in ["СП", "СКС", "КСМ", "не вступив"]:
+            st.write(f"**{dept}**: {results[dept]:.2f}%")
+
+        st.success("Глухов.")
+
+
+if __name__ == "__main__":
     main()
